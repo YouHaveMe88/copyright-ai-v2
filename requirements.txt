@@ -1,0 +1,6 @@
+Flask>=3.0
+python-dotenv>=1.0
+openai>=1.51
+beautifulsoup4>=4.12
+requests>=2.31
+pytz>=2024.1

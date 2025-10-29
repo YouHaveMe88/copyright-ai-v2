@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Live Schedule - FYP & Trending</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="https://mattong.org/uploads/fav_1.png">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <style>
+    :root {
+      --bg: #1a001a;
+      --card: rgba(50, 0, 50, 0.6);
+      --text: #ffccff;
+      --accent: #ff00ff;
+      --accent2: #ff66ff;
+      --muted: #cc99cc;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Courier New", monospace;
+      margin: 0;
+      padding: 40px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Matrix Rain Background */
+    .matrix-rain {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      opacity: 0.3;
+    }
+
+    h1 {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 1.8rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      text-shadow: 0 0 10px var(--accent);
+    }
+
+    #clock {
+      font-size: 1.2rem;
+      color: var(--accent2);
+      font-weight: 600;
+      margin-bottom: 30px;
+      text-shadow: 0 0 5px var(--accent2);
+    }
+
+    #scheduleBox {
+      background: var(--card);
+      border-radius: 20px;
+      backdrop-filter: blur(12px);
+      padding: 30px 25px;
+      max-width: 800px;
+      width: 100%;
+      box-shadow: 0 0 40px rgba(0,0,0,0.3);
+      line-height: 1.7;
+      font-size: 1rem;
+      color: var(--text);
+      text-align: left;
+      animation: fadeIn 0.6s ease-in-out;
+      border: 1px solid rgba(0, 255, 0, 0.2);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Markdown beautify */
+    #scheduleBox h3, #scheduleBox h4 {
+      color: var(--accent2);
+      font-size: 1.2rem;
+      margin-top: 1.2em;
+      margin-bottom: 0.5em;
+    }
+
+    #scheduleBox strong {
+      color: var(--accent);
+    }
+
+    #scheduleBox p {
+      margin-bottom: 10px;
+    }
+
+    #scheduleBox li {
+    margin-bottom: 6px;
+    color: #cfd8e3;
+    }
+
+    #scheduleBox ul {
+    list-style-type: disc;
+    padding-left: 25px;
+    margin: 10px 0 20px;
+    }
+
+    footer {
+      margin-top: 35px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+
+<body>
+  <h1>🕒 Jadwal Upload Konten (AI Real-Time)</h1>
+  <div id="clock">Memuat waktu...</div>
+  <div id="scheduleBox">⏳ Memuat rekomendasi AI...</div>
+
+  <canvas class="matrix-rain" id="matrixCanvas"></canvas>
+
+  <footer>© 2025 AI Content Planner — Realtime TikTok & Instagram Scheduler</footer>
+
+  <script>
+    // Matrix Rain Effect
+    const canvas = document.getElementById('matrixCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    const matrixChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$+-*/=%\"'#&_(),.;:?!\\|{}<>[]^~";
+    const charsArray = matrixChars.split('');
+    const fontSize = 14;
+    const columns = canvas.width / fontSize;
+    const drops = [];
+    
+    for(let i = 0; i < columns; i++) {
+      drops[i] = Math.random() * -100;
+    }
+    
+    function drawMatrix() {
+      ctx.fillStyle = 'rgba(0, 17, 0, 0.04)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.fillStyle = '#0f0';
+      ctx.font = fontSize + 'px monospace';
+      
+      for(let i = 0; i < drops.length; i++) {
+        const text = charsArray[Math.floor(Math.random() * charsArray.length)];
+        const x = i * fontSize;
+        const y = drops[i] * fontSize;
+        
+        ctx.fillText(text, x, y);
+        
+        if(y > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0;
+        }
+        drops[i]++;
+      }
+    }
+    
+    setInterval(drawMatrix, 35);
+    
+    // Handle window resize
+    window.addEventListener('resize', function() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+
+    // Tampilkan waktu realtime
+    function updateClock() {
+        const now = new Date();
+        const hari = now.toLocaleDateString("id-ID", { weekday: "long" });
+        const jam = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        document.getElementById("clock").textContent = `${hari} ${jam}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Ambil jadwal AI dari backend
+    async function updateSchedule() {
+        const res = await fetch("/get_schedule");
+        const data = await res.json();
+        const html = formatMarkdown(data.schedule);
+        document.getElementById("scheduleBox").innerHTML = html;
+    }
+
+    // Format markdown → HTML agar tampil rapi
+    function formatMarkdown(md) {
+    if (!md) return "";
+    const lines = md.replace(/\r/g, "").split("\n");
+    let html = "", inUL = false;
+
+    const escapeHTML = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const mdInline = s => s
+      .replace(/(\*\*|__)(.+?)\1/g, "<strong>$2</strong>")  // **bold** / __bold__
+      .replace(/(\*|_)(.+?)\1/g, "<em>$2</em>");            // *italic* / _italic_
+
+    const flushUL = () => { if (inUL) { html += "</ul>"; inUL = false; } };
+
+    for (let raw of lines) {
+      const line = raw.trim();
+
+      // baris kosong => akhiri <ul> & beri spasi
+      if (!line) { flushUL(); html += "<br>"; continue; }
+
+      // Heading bernomor: "1. TikTok"
+      const mNum = line.match(/^\d+\.\s+(.+)$/);
+      if (mNum) { flushUL(); html += `<h3>${escapeHTML(mNum[1])}</h3>`; continue; }
+
+      // Bullet: "* " atau "- "
+      const mBul = line.match(/^[*-]\s+(.+)$/);
+      if (mBul) {
+        if (!inUL) { html += "<ul>"; inUL = true; }
+        html += `<li>${mdInline(escapeHTML(mBul[1]))}</li>`;
+        continue;
+      }
+
+      // Paragraf biasa
+      flushUL();
+      html += `<p>${mdInline(escapeHTML(line))}</p>`;
+    }
+    flushUL();
+    return html;
+  }
+
+    updateSchedule();
+    setInterval(updateSchedule, 3600000); // update tiap 1 jam
+  </script>
+</body>
+</html>

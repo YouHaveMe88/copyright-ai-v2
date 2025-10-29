@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <title>AI News Rewriter & Summarizer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://mattong.org/uploads/fav_1.png">
+  <style>
+    /* Tambahan gaya untuk tombol copy */
+    .copy-btn {
+      background-color: var(--accent);
+      color: #000;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all .2s ease;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+
+    .copy-btn:hover {
+      background-color: #ff66ff;
+      box-shadow: 0 0 15px var(--accent);
+      transform: translateY(-2px);
+    }
+
+    #copyNotice {
+      color: var(--accent);
+      margin-top: 5px;
+      font-size: 0.9em;
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>📰 AI News Rewriter & Summarizer</h1>
+    <p>Masukkan URL atau teks berita untuk diringkas, ditulis ulang, dibuatkan judul, atau tagar.</p>
+
+    <input type="text" id="urlInput" placeholder="Masukkan URL berita (opsional)">
+    <textarea id="textInput" rows="7" placeholder="Atau tempelkan teks berita di sini..."></textarea>
+    <input type="text" id="imageInput" placeholder="Masukkan URL gambar (opsional untuk model vision)">
+    <button id="visionBtn">Describe Gambar</button>
+
+    <div class="mode-group">
+      <select id="actionSelect">
+        <option value="summarize">Ringkas Berita</option>
+        <option value="rewrite">Tulis Ulang (Anti-Copyright)</option>
+      </select>
+
+      <input type="text" id="imgPrompt" placeholder="Prompt Gambar (opsional, biarkan kosong untuk auto dari berita)">
+      <div class="mode-group">
+        <select id="imageModelSelect" title="Model gambar via OpenRouter">
+          <option value="stability-ai/sdxl">Stable Diffusion XL (Stability)</option>
+          <option value="black-forest-labs/flux-1.1-schnell">FLUX 1.1 Schnell (BFL)</option>
+          <option value="stability-ai/stable-diffusion-3.5-large">Stable Diffusion 3.5 Large</option>
+        </select>
+        <select id="imageSizeSelect" title="Ukuran output">
+          <option value="1024x1024" selected>1024 × 1024</option>
+          <option value="768x768">768 × 768</option>
+          <option value="512x512">512 × 512</option>
+        </select>
+      </div>
+
+      <select id="modeSelect">
+        <option value="AI">Gunakan AI</option>
+        <option value="Lokal">Gunakan Mode Lokal</option>
+      </select>
+    </div>
+
+    <!-- Pilihan model via OpenRouter -->
+    <div class="mode-group">
+      <select id="modelSelect" title="Pilih model OpenRouter">
+        <option value="google/gemini-2.5-flash">Gemini 2.5 Flash (google)</option>
+        <option value="qwen/qwen3-vl-8b-instruct">Qwen3 VL-8B Instruct (Vision)</option>
+        <option value="qwen/qwen3-vl-8b-thinking">Qwen3 VL-8B Thinking (Vision)</option>
+        <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+        <option value="deepseek/deepseek-chat">DeepSeek Chat</option>
+        <option value="meta-llama/llama-3.1-70b-instruct">Llama 3.1 70B Instruct</option>
+      </select>
+      <!-- <input id="modelCustom" placeholder="atau ketik model manual (opsional)" /> -->
+    </div>
+
+    <div class="btn-group">
+      <button id="processBtn">Proses</button>
+      <button id="titleBtn">Generate Judul</button>
+      <button id="hashtagBtn">Generate Tagar</button>
+      <button id="imgGenBtn">🎨 Generate Gambar</button>
+    </div>
+
+    <div id="imageResult" class="card" style="display:none;margin-top:16px;">
+      <div id="imageHolder" style="text-align:center;"></div>
+      <div class="image-actions" style="display:flex;gap:10px;justify-content:center;margin-top:10px;">
+        <a id="downloadImg" download="generated.png" style="display:none;">⬇️ Download</a>
+        <a id="openImg" target="_blank" rel="noopener" style="display:none;">🔗 Buka</a>
+      </div>
+    </div>
+
+    <label style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+      <input type="checkbox" id="includeGlobal" checked>
+      Sertakan Tagar Global 🌍
+    </label>
+
+    <a href="/schedule"
+      style="color:#ff00ff;font-weight:bold;text-decoration:none;text-shadow:0 0 5px rgba(255,0,255,0.3);">🔔 Lihat
+      Jadwal FYP AI</a>
+
+    <!-- Progress Bar -->
+    <div id="progressWrap" aria-hidden="true">
+      <div id="progressTrack">
+        <div id="progressBar"></div>
+      </div>
+      <div id="progressText">0%</div>
+    </div>
+
+
+    <div id="result"></div>
+    <button id="copyBtn" class="copy-btn" style="display:none;">📋 Copy Hasil</button>
+    <div id="copyNotice">✅ Teks berhasil disalin!</div>
+  </div>
+
+  <canvas class="matrix-rain" id="matrixCanvas"></canvas>
+
+  <script>
+    // Matrix Rain Effect
+    const canvas = document.getElementById('matrixCanvas');
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const matrixChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$+-*/=%\"'#&_(),.;:?!\\|{}<>[]^~";
+    const charsArray = matrixChars.split('');
+    const fontSize = 14;
+    const columns = canvas.width / fontSize;
+    const drops = [];
+
+    for (let i = 0; i < columns; i++) {
+      drops[i] = Math.random() * -100;
+    }
+
+    function drawMatrix() {
+      ctx.fillStyle = 'rgba(26, 0, 26, 0.04)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, '#ff00ff');
+      gradient.addColorStop(1, '#cc00cc');
+
+      ctx.fillStyle = gradient;
+      ctx.font = fontSize + 'px monospace';
+
+      for (let i = 0; i < drops.length; i++) {
+        const text = charsArray[Math.floor(Math.random() * charsArray.length)];
+        const x = i * fontSize;
+        const y = drops[i] * fontSize;
+
+        ctx.fillText(text, x, y);
+
+        if (y > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0;
+        }
+        drops[i]++;
+      }
+    }
+
+    setInterval(drawMatrix, 35);
+
+    // Handle window resize
+    window.addEventListener('resize', function () {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+  </script>
+
+  <script>
+    // Tambah normalizer ID model
+    function normalizeModel(m) {
+      const map = {
+        "qwen/qwen3-72b-instruct": "qwen/qwen2.5-72b-instruct",
+        "qwen/qwen3-32b-instruct": "qwen/qwen2.5-32b-instruct",
+        "qwen/qwen3-14b-instruct": "qwen/qwen2.5-14b-instruct",
+        "qwen/qwen3-7b-instruct": "qwen/qwen2.5-7b-instruct"
+      };
+      return map[m] || m;
+    }
+
+    const btns = ["processBtn", "titleBtn", "hashtagBtn", "visionBtn", "imgGenBtn"]
+      .map(id => document.getElementById(id))
+      .filter(Boolean);
+
+    function setBusy(busy) {
+      btns.forEach(btn => btn.disabled = !!busy);
+    }
+
+    function sanitizeModelId(m) {
+      // trim, lalu buang spasi & tanda baca di UJUNG (.,;:"'’)
+      return (m || "").trim().replace(/[.\s,;:"'’]+$/g, "");
+    }
+
+    // ===== Progress Controller =====
+    let _progTimer = null;
+    let _progVal = 0;
+    let _t0 = 0;
+
+    function _renderProgress() {
+      const wrap = document.getElementById("progressWrap");
+      const bar = document.getElementById("progressBar");
+      const txt = document.getElementById("progressText");
+      bar.style.width = _progVal + "%";
+      txt.textContent = Math.round(_progVal) + "%";
+      wrap.classList.toggle("error", false);
+    }
+
+    function startProgress() {
+      const wrap = document.getElementById("progressWrap");
+      wrap.style.display = "flex";
+      _progVal = 0;
+      _t0 = Date.now();
+      _renderProgress();
+
+      // Naik bertahap ke 90% (simulasi), easing ringan
+      clearInterval(_progTimer);
+      _progTimer = setInterval(() => {
+        // semakin lama, semakin lambat (supaya realistis)
+        const elapsed = (Date.now() - _t0) / 1000; // detik
+        const speed = Math.max(0.5, 3.0 - elapsed); // melambat
+        _progVal = Math.min(90, _progVal + speed); // plafon 90% saat menunggu
+        _renderProgress();
+      }, 120);
+    }
+
+    function completeProgress() {
+      const wrap = document.getElementById("progressWrap");
+      clearInterval(_progTimer);
+      _progVal = 100;
+      _renderProgress();
+      // sembunyikan setelah sejenak
+      setTimeout(() => {
+        wrap.style.display = "none";
+      }, 600);
+    }
+
+    function failProgress() {
+      const wrap = document.getElementById("progressWrap");
+      const txt = document.getElementById("progressText");
+      clearInterval(_progTimer);
+      _progVal = Math.max(_progVal, 95); // dorong mendekati penuh
+      _renderProgress();
+      wrap.classList.add("error");
+      txt.textContent = "Gagal";
+      setTimeout(() => {
+        wrap.style.display = "none";
+      }, 900);
+    }
+
+
+    async function sendImageRequest() {
+      const url = document.getElementById("urlInput").value;
+      const text = document.getElementById("textInput").value;
+      const imgPrompt = document.getElementById("imgPrompt").value;
+      const imageModel = document.getElementById("imageModelSelect").value;
+      const size = document.getElementById("imageSizeSelect").value;
+
+      const resultBox = document.getElementById("result");
+      const holder = document.getElementById("imageHolder");
+      const wrap = document.getElementById("imageResult");
+      const aDl = document.getElementById("downloadImg");
+      const aOpen = document.getElementById("openImg");
+
+      resultBox.innerHTML = "<i>⏳ Menyiapkan prompt gambar...</i>";
+      holder.innerHTML = "";
+      aDl.style.display = "none";
+      aOpen.style.display = "none";
+      wrap.style.display = "block";
+
+      setBusy(true);
+      startProgress();
+      try {
+        const res = await fetch("/image", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            url,
+            text,
+            image_prompt: imgPrompt, // kosong = auto dari berita
+            image_model: imageModel,
+            size
+          })
+        });
+        const data = await res.json();
+
+        if (data.data_url) {
+          // b64 diterima
+          const imgUrl = data.data_url;
+          holder.innerHTML = `<img src="${imgUrl}" alt="Generated Image" style="max-width:100%;border-radius:12px;">`;
+          aDl.href = imgUrl;
+          aDl.style.display = "inline-block";
+          aOpen.href = imgUrl;
+          aOpen.style.display = "inline-block";
+        } else if (data.image_url) {
+          // provider kirim URL
+          const imgUrl = data.image_url;
+          holder.innerHTML = `<img src="${imgUrl}" alt="Generated Image" style="max-width:100%;border-radius:12px;">`;
+          aOpen.href = imgUrl;
+          aOpen.style.display = "inline-block";
+          // untuk download, kita tetap arahkan ke URL (beberapa host blokir download langsung)
+          aDl.href = imgUrl;
+          aDl.style.display = "inline-block";
+        } else {
+          holder.innerHTML = `<div>Gagal membuat gambar: ${data.error || "format respons tidak diketahui"}</div>`;
+        }
+        completeProgress();
+      } catch (e) {
+        console.error(e);
+        holder.innerHTML = "Terjadi error jaringan saat generate gambar.";
+        failProgress();
+      } finally {
+        setBusy(false);
+        resultBox.innerHTML = ""; // bersihkan pesan sementara
+      }
+    }
+
+    document.getElementById("imgGenBtn").onclick = sendImageRequest;
+
+    async function downloadVisibleImage() {
+      const img = document.querySelector('#imageHolder img');
+      if (!img) return;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      await img.decode();
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      ctx.drawImage(img, 0, 0);
+      const dataURL = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataURL;
+      a.download = 'generated.png';
+      a.click();
+    }
+    document.getElementById('downloadImg').onclick = (e) => {
+      e.preventDefault();
+      downloadVisibleImage();
+    };
+
+
+    async function sendRequest(action, includeGlobal = true, imageUrl = "") {
+      const url = document.getElementById("urlInput").value;
+      const text = document.getElementById("textInput").value;
+      const mode = document.getElementById("modeSelect").value;
+
+      const modelSelect = document.getElementById("modelSelect").value;
+      const modelCustomEl = document.getElementById("modelCustom");
+      let model = (modelCustomEl && modelCustomEl.value.trim()) || modelSelect;
+      model = sanitizeModelId(normalizeModel(model));
+
+      const resultBox = document.getElementById("result");
+      const copyBtn = document.getElementById("copyBtn");
+      const notice = document.getElementById("copyNotice");
+
+      resultBox.innerHTML = "<i>⏳ Memproses...</i>";
+      copyBtn.style.display = "none";
+      notice.style.display = "none";
+
+      setBusy(true);
+      startProgress();
+      try {
+        const res = await fetch("/process", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            url,
+            text,
+            mode,
+            action,
+            include_global: includeGlobal,
+            model,
+            image_url: imageUrl
+          })
+        });
+
+        const data = await res.json();
+        resultBox.innerHTML = data.result || data.error || "Tidak ada respons.";
+        if (data.result) copyBtn.style.display = "inline-block";
+        completeProgress();
+      } catch (err) {
+        console.error(err);
+        resultBox.innerHTML = "Terjadi error jaringan. Coba lagi.";
+        failProgress();
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    // Satu-satunya handler: includeGlobal dihormati
+    document.getElementById("processBtn").onclick = () =>
+      sendRequest(document.getElementById("actionSelect").value);
+
+    document.getElementById("titleBtn").onclick = () =>
+      sendRequest("generate_title");
+
+    document.getElementById("hashtagBtn").onclick = () => {
+      const includeGlobal = document.getElementById("includeGlobal").checked;
+      sendRequest("generate_hashtags", includeGlobal);
+    };
+
+    // Tombol vision (Qwen3 VL-8B Instruct)
+    document.getElementById("visionBtn").onclick = () => {
+      const img = (document.getElementById("imageInput").value || "").trim();
+      if (!img) {
+        alert("Masukkan URL gambar dulu.");
+        return;
+      }
+      // textInput boleh kosong; action khusus vision
+      sendRequest("describe_image", true, img);
+    };
+
+    // Fungsi copy hasil
+    document.getElementById("copyBtn").onclick = async () => {
+      const box = document.getElementById("result");
+      // Ambil teks; gantikan <br> dengan newline agar tidak menempel
+      let text = box.innerText || box.textContent || "";
+
+      const notice = document.getElementById("copyNotice");
+      const show = () => {
+        notice.style.display = "block";
+        setTimeout(() => notice.style.display = "none", 2000);
+      };
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          show();
+        } else {
+          // Fallback untuk non-HTTPS / browser lama
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = document.execCommand("copy");
+          document.body.removeChild(ta);
+          if (ok) show();
+        }
+      } catch (e) {
+        console.error("Copy failed:", e);
+      }
+    };
+  </script>
+</body>
+
+</html>
